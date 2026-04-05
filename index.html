@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Smart Inventory Scanner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    #reader video { object-fit: cover; border-radius: 0.5rem; width: 100% !important; }
+    .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased selection:bg-blue-200">
+  <div id="app" class="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative overflow-hidden flex flex-col">
+    <header class="bg-blue-600 text-white p-4 shadow-md z-10 sticky top-0 flex justify-between items-center">
+      <h1 class="text-xl font-bold flex items-center gap-2"><i data-lucide="package-search"></i> Inventory</h1>
+      <span id="authStatus" class="text-xs bg-blue-700 px-2 py-1 rounded-full opacity-0 transition-opacity">Online</span>
+    </header>
+
+    <main class="flex-1 overflow-y-auto pb-24 relative">
+      <div id="view-list" class="p-4 block animate-fade-in">
+        <div class="flex gap-2 mb-6">
+          <div class="relative flex-1">
+            <i data-lucide="search" class="absolute left-3 top-3 text-gray-400 w-5 h-5"></i>
+            <input type="text" id="searchInput" placeholder="Search items..." class="w-full bg-gray-50 border border-gray-200 text-gray-800 rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+          </div>
+          <button id="btnSearchScan" class="bg-blue-100 text-blue-700 p-2.5 rounded-xl hover:bg-blue-200 transition active:scale-95 shadow-sm"><i data-lucide="scan-line"></i></button>
+        </div>
+        <div class="flex justify-between items-center mb-3 px-1">
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Your Items</h2>
+          <span id="itemCount" class="text-sm text-gray-400">0 items</span>
+        </div>
+        <div id="inventoryList" class="space-y-3"></div>
+      </div>
+
+      <div id="view-add-item" class="p-4 hidden animate-fade-in">
+        <button id="btnBackFromAdd" class="mb-4 text-gray-500 hover:text-gray-800 flex items-center gap-1 w-max active:scale-95 transition"><i data-lucide="arrow-left" class="w-5 h-5"></i> Back</button>
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">Add New Item</h2>
+        <form id="addItemForm" class="space-y-5">
+          <div class="bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">1. Scan Barcode</label>
+            <div class="flex gap-2">
+              <input type="text" id="itemBarcode" placeholder="Scan or enter barcode" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" required />
+              <button type="button" id="btnScanBarcodeForAdd" class="bg-gray-800 text-white px-4 py-2.5 rounded-lg hover:bg-gray-700 active:scale-95 transition flex items-center justify-center"><i data-lucide="scan-line"></i></button>
+            </div>
+            <div id="barcodeLookupStatus" class="hidden text-[10px] mt-2 flex items-center gap-1 font-medium italic"></div>
+          </div>
+          <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <label class="block text-sm font-semibold text-blue-900 mb-2">2. Take Picture for Auto-Description (OCR)</label>
+            <input type="file" id="itemImage" accept="image/*" capture="environment" class="w-full text-sm text-blue-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition cursor-pointer mb-2" />
+            <img id="itemImagePreview" class="hidden w-full h-40 object-cover rounded-lg border border-blue-200 shadow-sm mb-2" src="" alt="Preview" />
+            <div id="ocrStatusContainer" class="hidden flex items-center gap-2 text-sm mt-2">
+              <div id="ocrSpinner" class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              <span id="ocrStatusText" class="font-medium text-blue-700"></span>
+            </div>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">3. Item Identity & Location</label>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Item Name</label>
+              <input type="text" id="itemName" placeholder="E.g., Hershey's Kisses" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" required />
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-1">
+                <label class="block text-xs text-gray-500 mb-1">Location</label>
+                <input type="text" id="itemLocation" placeholder="E.g., Shelf A1" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" required />
+              </div>
+              <div class="w-24">
+                <label class="block text-xs text-gray-500 mb-1">Quantity</label>
+                <input type="number" id="itemQty" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" value="1" min="0" required />
+              </div>
+            </div>
+          </div>
+          <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-3">
+            <label class="block text-sm font-semibold text-indigo-900">4. Online data found in database about item</label>
+            <div id="onlineDataResult" class="hidden space-y-3 animate-fade-in max-h-64 overflow-y-auto pr-1"></div>
+            <div>
+              <textarea id="itemDesc" placeholder="Aggregated descriptions (Online + OCR + Manual)..." class="border border-gray-300 p-2.5 rounded-lg w-full h-40 focus:ring-2 focus:ring-blue-500 outline-none text-sm leading-relaxed"></textarea>
+            </div>
+            <div class="flex justify-between items-center px-1">
+              <button type="button" id="btnClearDescription" class="text-[10px] text-indigo-600 hover:underline font-medium">Clear all information</button>
+              <span id="lookupCount" class="text-[9px] text-gray-400"></span>
+            </div>
+          </div>
+          <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl mt-4 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition flex items-center justify-center gap-2"><i data-lucide="save"></i> Save Item to Database</button>
+        </form>
+      </div>
+
+      <div id="view-item-detail" class="p-4 hidden animate-fade-in">
+        <button id="btnBackFromDetail" class="mb-6 text-gray-500 hover:text-gray-800 flex items-center gap-1 w-max active:scale-95 transition"><i data-lucide="arrow-left" class="w-5 h-5"></i> Back to List</button>
+        <div id="detailContent" class="space-y-4"></div>
+        <button id="btnDeleteItem" class="w-full bg-red-50 text-red-600 font-bold py-3 rounded-xl border border-red-200 mt-8 hover:bg-red-100 active:scale-95 transition flex justify-center items-center gap-2"><i data-lucide="trash-2"></i> Delete Item</button>
+      </div>
+    </main>
+
+    <button id="fabAdd" class="absolute bottom-6 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-300 flex items-center justify-center hover:bg-blue-700 active:scale-90 transition z-20"><i data-lucide="plus" class="w-7 h-7"></i></button>
+
+    <div id="scannerModal" class="hidden absolute inset-0 bg-black/95 z-50 flex flex-col animate-fade-in">
+      <div class="p-4 flex justify-between items-center text-white bg-gradient-to-b from-black/80 to-transparent">
+        <h2 class="text-lg font-bold flex items-center gap-2"><i data-lucide="scan"></i> Camera Scanner</h2>
+        <div class="flex gap-3">
+          <button id="btnSwitchCamera" class="hidden bg-blue-600 p-2 rounded-full hover:bg-blue-700 active:scale-90 transition shadow-lg"><i data-lucide="refresh-cw"></i></button>
+          <button id="btnCloseScanner" class="bg-gray-800 p-2 rounded-full hover:bg-gray-700 active:scale-90 transition"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <div class="flex-1 flex flex-col justify-center items-center w-full px-4">
+        <div class="w-full max-w-sm rounded-xl overflow-hidden border-2 border-blue-500 relative bg-black">
+          <div id="reader" class="w-full"></div>
+          <div class="absolute inset-x-0 top-1/2 h-0.5 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,1)] animate-pulse"></div>
+        </div>
+        <p class="text-gray-300 mt-8 text-center text-sm px-8 font-medium">Point camera at a barcode.</p>
+        <p id="cameraHint" class="text-blue-400 mt-4 text-center text-xs px-8 hidden">Blurry? Tap the blue switch icon.</p>
+      </div>
+    </div>
+
+    <div id="loading" class="hidden absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-blue-600 mb-4 shadow-lg"></div>
+      <p class="text-blue-900 font-semibold text-sm">Processing...</p>
+    </div>
+
+    <div id="dialogOverlay" class="hidden absolute inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 animate-fade-in">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
+        <h3 id="dialogTitle" class="text-xl font-bold text-gray-800 mb-2">Notice</h3>
+        <p id="dialogMessage" class="text-gray-600 mb-8 leading-relaxed"></p>
+        <div class="flex justify-end gap-3">
+          <button id="dialogBtnCancel" class="hidden px-5 py-2.5 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition">Cancel</button>
+          <button id="dialogBtnOk" class="px-5 py-2.5 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition active:scale-95 shadow-md">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="imageModal" class="hidden absolute inset-0 bg-black/95 z-[70] flex flex-col justify-center items-center animate-fade-in p-4">
+      <button id="btnCloseImageModal" class="absolute top-6 right-6 bg-gray-800 text-white p-3 rounded-full hover:bg-gray-700 transition active:scale-90"><i data-lucide="x"></i></button>
+      <img id="fullSizeImage" src="" class="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl border border-gray-800" />
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    let db, auth, currentUser;
+    let inventory = [];
+    let html5QrCode;
+    let isProcessingScan = false;
+    let scannerAction = null;
+    let currentDetailId = null;
+    let availableCameras = [];
+    let backCameras = [];
+    let currentCameraIndex = 0;
+    let currentItemImageBase64 = null;
+    let dataStore = { onlineInfo: [], ocrInfo: "", imageStatus: "", onlineImgUrl: "" };
+    const appId = typeof __app_id !== "undefined" ? __app_id : "default-app-id";
+
+    const el = (id) => document.getElementById(id);
+    const safe = (v) => String(v ?? "").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
+    lucide.createIcons();
+
+    const syncFullDescription = () => {
+      const descInput = el("itemDesc");
+      const parts = [];
+      if (dataStore.onlineInfo.length) parts.push(`[ONLINE DATABASE RESULTS]\n${dataStore.onlineInfo.join("\n\n")}`);
+      if (dataStore.imageStatus) parts.push(`[MEDIA]\n${dataStore.imageStatus}`);
+      if (dataStore.ocrInfo) parts.push(`[OCR TEXT EXTRACTED]\n${dataStore.ocrInfo}`);
+      descInput.value = parts.join("\n\n");
+    };
+
+    const clearDescription = () => {
+      dataStore = { onlineInfo: [], ocrInfo: "", imageStatus: "", onlineImgUrl: "" };
+      el("itemDesc").value = "";
+      el("onlineDataResult").innerHTML = "";
+      el("onlineDataResult").classList.add("hidden");
+      el("lookupCount").textContent = "";
+    };
+
+    const switchView = (viewId) => {
+      ["view-list", "view-add-item", "view-item-detail"].forEach(id => el(id).classList.add("hidden"));
+      el(viewId).classList.remove("hidden");
+      el("fabAdd").classList.toggle("hidden", viewId !== "view-list");
+      lucide.createIcons();
+    };
+    window.switchView = switchView;
+
+    const showLoading = (show) => el("loading").classList.toggle("hidden", !show);
+    const showMsg = (message, title = "Notice") => { el("dialogTitle").textContent = title; el("dialogMessage").textContent = message; el("dialogBtnCancel").classList.add("hidden"); el("dialogOverlay").classList.remove("hidden"); };
+    const showConfirm = (message, callback) => { el("dialogTitle").textContent = "Confirm"; el("dialogMessage").textContent = message; el("dialogBtnCancel").classList.remove("hidden"); el("dialogOverlay").classList.remove("hidden"); window.confirmCallback = callback; };
+
+    const renderList = (list) => {
+      const c = el("inventoryList");
+      if (!list.length) { c.innerHTML = '<div class="text-center py-10 text-gray-400 text-sm">Empty inventory</div>'; return; }
+      c.innerHTML = list.map(i => `
+        <div data-id="${safe(i.id)}" class="inventory-card bg-white p-3 rounded-xl border border-gray-100 flex items-center gap-3 shadow-sm active:scale-[0.98] transition">
+          <img src="${safe(i.imageBase64 || i.onlineImgUrl || 'https://via.placeholder.com/100?text=No+Img')}" class="w-12 h-12 object-cover rounded-lg border">
+          <div class="flex-1 min-w-0">
+            <h3 class="font-bold text-gray-800 truncate text-sm">${safe(i.name)}</h3>
+            <p class="text-[10px] text-gray-500 truncate">${safe(i.location || "Unknown")} • BC: ${safe(i.barcode)}</p>
+          </div>
+          <div class="text-right shrink-0"><span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded text-[10px]">Qty: ${safe(i.quantity)}</span></div>
+        </div>`).join("");
+      c.querySelectorAll("[data-id]").forEach(card => card.addEventListener("click", () => openDetail(card.dataset.id)));
+      lucide.createIcons();
+    };
+
+    const handleSearch = () => {
+      const t = el("searchInput").value.toLowerCase().trim();
+      const f = inventory.filter(i => [i.name, i.barcode, i.location].some(s => String(s).toLowerCase().includes(t)));
+      renderList(f);
+      el("itemCount").textContent = `${f.length} items`;
+    };
+
+    const openImageModal = (src) => { el("fullSizeImage").src = src; el("imageModal").classList.remove("hidden"); };
+    window.openImageModal = openImageModal;
+    const closeImageModal = () => el("imageModal").classList.add("hidden");
+    window.closeImageModal = closeImageModal;
+
+    async function lookupBarcodeOnline(barcode) {
+      if (!barcode) return;
+      const statusEl = el("barcodeLookupStatus");
+      const nameInput = el("itemName");
+      const resultPanel = el("onlineDataResult");
+      statusEl.innerHTML = '<span class="animate-spin h-2 w-2 border-b-2 border-blue-600 rounded-full inline-block"></span> Deep searching specialized databases...';
+      statusEl.className = "text-[10px] mt-2 text-blue-600 flex items-center gap-1";
+      statusEl.classList.remove("hidden");
+      resultPanel.innerHTML = "";
+      dataStore.onlineInfo = [];
+      let foundCount = 0;
+      const updateUI = (source, name, brand, category, img) => {
+        foundCount++;
+        if (!nameInput.value) nameInput.value = name;
+        const card = document.createElement("div");
+        card.className = "flex gap-3 items-start bg-white p-2 rounded-lg border border-indigo-100 shadow-sm animate-fade-in mb-2";
+        card.innerHTML = `
+          <img src="${img || "https://via.placeholder.com/80?text=No+Img"}" class="w-16 h-16 object-contain rounded border bg-gray-50 shrink-0">
+          <div class="flex-1 text-[10px] min-w-0">
+            <p class="font-bold text-indigo-900 truncate">${safe(name)}</p>
+            <p class="text-gray-500 truncate">${safe(brand || "Unknown Brand")}</p>
+            <p class="text-gray-400 mt-1 uppercase text-[8px] font-bold">Source: ${safe(source)}</p>
+          </div>`;
+        resultPanel.appendChild(card);
+        resultPanel.classList.remove("hidden");
+        dataStore.onlineInfo.push(`[${source}]\nName: ${name}\nBrand: ${brand}\nCategory: ${category}`);
+        if (img && !dataStore.onlineImgUrl) dataStore.onlineImgUrl = img;
+        el("lookupCount").textContent = `Matches found: ${foundCount}`;
+        syncFullDescription();
+      };
+      const queries = [
+        fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`).then(r => r.json()).then(d => { if (d.status === 1 && d.product) updateUI("OpenFoodFacts", d.product.product_name || d.product.generic_name, d.product.brands, d.product.categories_tags?.[0], d.product.image_url); }).catch(() => {}),
+        fetch(`https://world.openbeautyfacts.org/api/v2/product/${barcode}.json`).then(r => r.json()).then(d => { if (d.status === 1 && d.product) updateUI("OpenBeautyFacts", d.product.product_name, d.product.brands, "Cosmetic/Care", d.product.image_url); }).catch(() => {}),
+        fetch(`https://world.openproductfacts.org/api/v2/product/${barcode}.json`).then(r => r.json()).then(d => { if (d.status === 1 && d.product) updateUI("OpenProductFacts", d.product.product_name || d.product.generic_name, d.product.brands, "General Goods", d.product.image_url); }).catch(() => {}),
+        fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`).then(r => r.json()).then(d => { if (d.items?.length) updateUI("UPCitemdb", d.items[0].title, d.items[0].brand, d.items[0].category, d.items[0].images?.[0]); }).catch(() => {}),
+        fetch(`https://api.fda.gov/drug/ndc.json?search=openfda.upc:"${barcode}"`).then(r => r.json()).then(d => { if (d.results?.length) updateUI("U.S. FDA Drug DB", d.results[0].brand_name || d.results[0].generic_name, d.results[0].labeler_name, "Medicine/Drug", null); }).catch(() => {}),
+        fetch(`https://api.fda.gov/drug/ndc.json?search=packaging.package_ndc:"${barcode}"`).then(r => r.json()).then(d => { if (d.results?.length) updateUI("U.S. FDA Drug DB (NDC)", d.results[0].brand_name || d.results[0].generic_name, d.results[0].labeler_name, "Medicine/Drug", null); }).catch(() => {})
+      ];
+      await Promise.allSettled(queries);
+      if (foundCount > 0) {
+        statusEl.innerHTML = `<i data-lucide="check-circle" class="w-3 h-3"></i> Found ${foundCount} matches across specialized databases.`;
+        statusEl.className = "text-[10px] mt-2 text-green-600 flex items-center gap-1 font-bold";
+      } else {
+        statusEl.innerHTML = `<div class="flex flex-col items-start gap-2 mt-1"><span class="text-gray-500"><i data-lucide="info" class="w-3 h-3 inline"></i> Not found in public databases.</span><a href="https://www.google.com/search?q=${encodeURIComponent(barcode)}" target="_blank" class="inline-flex items-center gap-1 bg-blue-50 border border-blue-100 text-blue-700 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-blue-100 transition active:scale-95"><i data-lucide="external-link" class="w-3 h-3"></i> Search Google for Barcode</a></div>`;
+        statusEl.className = "text-[10px] mt-2";
+      }
+      lucide.createIcons();
+    }
+    window.clearDescription = clearDescription;
+
+    const startScanner = async (action, forceIdx = null) => {
+      scannerAction = action;
+      isProcessingScan = false;
+      el("scannerModal").classList.remove("hidden");
+      try {
+        if (availableCameras.length === 0) {
+          availableCameras = await Html5Qrcode.getCameras();
+          backCameras = availableCameras.filter(c => /back|rear|environment/i.test(c.label));
+        }
+        if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+        const cfg = backCameras.length > 0 ? backCameras[(forceIdx || 0) % backCameras.length].id : { facingMode: "environment" };
+        el("btnSwitchCamera").classList.toggle("hidden", backCameras.length <= 1);
+        await html5QrCode.start(cfg, { fps: 15, qrbox: { width: 280, height: 150 } }, (text) => {
+          if (isProcessingScan) return;
+          isProcessingScan = true;
+          el("scannerModal").classList.add("hidden");
+          const code = text.trim();
+          if (scannerAction === "add") {
+            el("itemBarcode").value = code;
+            lookupBarcodeOnline(code);
+          } else {
+            el("searchInput").value = code;
+            handleSearch();
+            const m = inventory.find(i => String(i.barcode) === code);
+            if (m) openDetail(m.id);
+          }
+          setTimeout(() => { try { html5QrCode.stop().then(() => html5QrCode.clear()); } catch (e) {} }, 100);
+        }, () => {});
+      } catch (err) { closeScanner(); }
+    };
+    const closeScanner = async () => { el("scannerModal").classList.add("hidden"); try { if (html5QrCode) { await html5QrCode.stop(); await html5QrCode.clear(); } } catch (e) {} };
+
+    function openDetail(id) {
+      const i = inventory.find(item => item.id === id);
+      if (!i) return;
+      currentDetailId = id;
+      const content = el("detailContent");
+      const date = i.createdAt ? new Date(i.createdAt).toLocaleString() : "N/A";
+      const displayImg = i.imageBase64 || i.onlineImgUrl;
+      content.innerHTML = `
+        ${displayImg ? `<div class="relative"><img src="${safe(displayImg)}" class="w-full h-48 object-cover rounded-xl border border-gray-100"><button class="absolute bottom-3 right-3 bg-black/60 text-white px-3 py-1.5 rounded-lg text-[10px] backdrop-blur-md shadow-xl flex items-center gap-1" data-full-image="${safe(displayImg)}"><i data-lucide="maximize"></i> Full Image</button></div>` : ""}
+        <div class="py-2"><h2 class="text-2xl font-black text-gray-900 leading-tight">${safe(i.name)}</h2><p class="text-[10px] text-gray-400 mt-1 uppercase tracking-widest font-bold">Recorded: ${safe(date)}</p></div>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="bg-white p-3 rounded-xl border border-gray-100 shadow-sm"><p class="text-gray-400 font-bold uppercase text-[9px] mb-1">Barcode</p><p class="font-mono text-gray-800 text-sm">${safe(i.barcode || "N/A")}</p></div>
+          <div class="bg-white p-3 rounded-xl border border-gray-100 shadow-sm"><p class="text-gray-400 font-bold uppercase text-[9px] mb-1">Location</p><p class="text-gray-800 text-sm font-medium">${safe(i.location || "N/A")}</p></div>
+        </div>
+        <div class="bg-blue-600 p-4 rounded-xl text-white shadow-lg flex justify-between items-center mb-4"><p class="font-bold opacity-80 text-sm">Stock Level</p><p class="text-3xl font-black">${safe(i.quantity)}</p></div>
+        <div class="bg-gray-50 p-4 rounded-xl border border-gray-200"><p class="text-gray-400 font-bold uppercase text-[9px] mb-2 tracking-widest">Descriptions</p><p class="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">${safe(i.description || "No descriptive data recorded.")}</p></div>`;
+      content.querySelectorAll("[data-full-image]").forEach(btn => btn.addEventListener("click", () => openImageModal(btn.dataset.fullImage)));
+      lucide.createIcons();
+      switchView("view-item-detail");
+    }
+    window.openDetail = openDetail;
+
+    async function initFirebase() {
+      try {
+        const config = typeof __firebase_config !== "undefined" ? JSON.parse(__firebase_config) : null;
+        if (!config) {
+          el("authStatus").textContent = "Local demo";
+          el("authStatus").classList.remove("opacity-0");
+          renderList([]);
+          return;
+        }
+        const app = initializeApp(config);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+        else await signInAnonymously(auth);
+        onAuthStateChanged(auth, (user) => {
+          currentUser = user;
+          el("authStatus").textContent = user ? "Online" : "Offline";
+          el("authStatus").classList.remove("opacity-0");
+          if (user) {
+            const itemsRef = collection(db, "artifacts", appId, "users", currentUser.uid, "inventory");
+            onSnapshot(itemsRef, (snapshot) => {
+              inventory = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+              inventory.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+              handleSearch();
+            });
+          }
+        });
+      } catch (err) {
+        console.error(err);
+        el("authStatus").textContent = "Local demo";
+        el("authStatus").classList.remove("opacity-0");
+      }
+    }
+
+    el("dialogBtnOk").addEventListener("click", () => { el("dialogOverlay").classList.add("hidden"); if (window.confirmCallback) { window.confirmCallback(); window.confirmCallback = null; } });
+    el("dialogBtnCancel").addEventListener("click", () => el("dialogOverlay").classList.add("hidden"));
+    el("btnCloseImageModal").addEventListener("click", closeImageModal);
+    el("btnClearDescription").addEventListener("click", clearDescription);
+    el("btnBackFromAdd").addEventListener("click", () => switchView("view-list"));
+    el("btnBackFromDetail").addEventListener("click", () => switchView("view-list"));
+    el("fabAdd").addEventListener("click", () => { el("addItemForm").reset(); clearDescription(); el("itemImagePreview").classList.add("hidden"); switchView("view-add-item"); });
+    el("btnSearchScan").addEventListener("click", () => startScanner("search"));
+    el("btnScanBarcodeForAdd").addEventListener("click", () => startScanner("add"));
+    el("btnCloseScanner").addEventListener("click", closeScanner);
+    el("btnSwitchCamera").addEventListener("click", () => startScanner(scannerAction, currentCameraIndex + 1));
+    el("itemBarcode").addEventListener("change", (e) => lookupBarcodeOnline(e.target.value.trim()));
+    el("searchInput").addEventListener("input", handleSearch);
+
+    el("itemImage").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const statusContainer = el("ocrStatusContainer");
+      const statusText = el("ocrStatusText");
+      const spinner = el("ocrSpinner");
+      statusContainer.classList.remove("hidden");
+      spinner.classList.remove("hidden");
+      statusText.textContent = "Enhancing & Reading...";
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = async () => {
+          const canvas = document.createElement("canvas");
+          const MAX = 1000;
+          let w = img.width, h = img.height;
+          if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } } else if (h > MAX) { w *= MAX / h; h = MAX; }
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          currentItemImageBase64 = canvas.toDataURL("image/jpeg", 0.6);
+          el("itemImagePreview").src = currentItemImageBase64;
+          el("itemImagePreview").classList.remove("hidden");
+          dataStore.imageStatus = "Local photo captured.";
+          syncFullDescription();
+          const ocrC = document.createElement("canvas");
+          ocrC.width = w; ocrC.height = h;
+          const ocrCtx = ocrC.getContext("2d");
+          ocrCtx.filter = "grayscale(100%) contrast(150%) brightness(110%)";
+          ocrCtx.drawImage(img, 0, 0, w, h);
+          try {
+            const worker = await Tesseract.createWorker("eng");
+            await worker.setParameters({ tessedit_pageseg_mode: "11" });
+            const ret = await worker.recognize(ocrC);
+            const txt = ret.data.text.trim().replace(/[^\x20-\x7E\n]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+            if (txt.length > 3) { dataStore.ocrInfo = txt; statusText.textContent = "Text Extracted!"; } else statusText.textContent = "No text found.";
+            syncFullDescription();
+            await worker.terminate();
+          } catch (err) { statusText.textContent = "OCR failed."; }
+          spinner.classList.add("hidden");
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    el("addItemForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!currentUser || !db) return showMsg("Firebase is not configured yet.");
+      showLoading(true);
+      try {
+        await addDoc(collection(db, "artifacts", appId, "users", currentUser.uid, "inventory"), {
+          barcode: el("itemBarcode").value,
+          name: el("itemName").value,
+          description: el("itemDesc").value,
+          location: el("itemLocation").value,
+          quantity: parseInt(el("itemQty").value, 10),
+          imageBase64: currentItemImageBase64,
+          onlineImgUrl: dataStore.onlineImgUrl,
+          createdAt: new Date().toISOString()
+        });
+        e.target.reset();
+        clearDescription();
+        el("itemImagePreview").classList.add("hidden");
+        switchView("view-list");
+        showMsg("Item saved successfully!");
+      } catch (err) {
+        console.error(err);
+        showMsg("Save error.");
+      }
+      showLoading(false);
+    });
+
+    el("btnDeleteItem").addEventListener("click", () => {
+      if (!currentDetailId) return;
+      showConfirm("Delete this item permanently?", async () => {
+        showLoading(true);
+        try {
+          await deleteDoc(doc(db, "artifacts", appId, "users", currentUser.uid, "inventory", currentDetailId));
+          switchView("view-list");
+        } catch (err) { showMsg("Delete error."); }
+        showLoading(false);
+      });
+    });
+
+    window.addEventListener("DOMContentLoaded", initFirebase);
+    renderList([]);
+  </script>
+</body>
+</html>
