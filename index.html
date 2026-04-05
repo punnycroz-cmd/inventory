@@ -208,6 +208,10 @@
     let qaPipeline = null;
 
     const el = (id) => document.getElementById(id);
+    const on = (id, event, handler) => {
+      const node = el(id);
+      if (node) node.addEventListener(event, handler);
+    };
     const safe = (v) => String(v ?? "").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
     lucide.createIcons();
@@ -624,13 +628,13 @@
       }
     }
 
-    el("dialogBtnOk").addEventListener("click", () => { el("dialogOverlay").classList.add("hidden"); if (window.confirmCallback) { window.confirmCallback(); window.confirmCallback = null; } });
-    el("dialogBtnCancel").addEventListener("click", () => el("dialogOverlay").classList.add("hidden"));
-    el("btnCloseImageModal").addEventListener("click", closeImageModal);
-    el("btnClearDescription").addEventListener("click", clearDescription);
-    el("btnBackFromAdd").addEventListener("click", () => switchView("view-list"));
-    el("btnBackFromDetail").addEventListener("click", () => switchView("view-list"));
-    el("fabAdd").addEventListener("click", () => {
+    on("dialogBtnOk", "click", () => { el("dialogOverlay").classList.add("hidden"); if (window.confirmCallback) { window.confirmCallback(); window.confirmCallback = null; } });
+    on("dialogBtnCancel", "click", () => el("dialogOverlay").classList.add("hidden"));
+    on("btnCloseImageModal", "click", closeImageModal);
+    on("btnClearDescription", "click", clearDescription);
+    on("btnBackFromAdd", "click", () => switchView("view-list"));
+    on("btnBackFromDetail", "click", () => switchView("view-list"));
+    on("fabAdd", "click", () => {
       el("addItemForm").reset();
       clearDescription();
       el("itemImagePreview").classList.add("hidden");
@@ -640,13 +644,13 @@
       currentLocationImageBase64 = null;
       switchView("view-add-item");
     });
-    el("btnSearchScan").addEventListener("click", () => startScanner("search"));
-    el("btnScanBarcodeForAdd").addEventListener("click", () => startScanner("add"));
-    el("btnCloseScanner").addEventListener("click", closeScanner);
-    el("btnSwitchCamera").addEventListener("click", () => startScanner(scannerAction, currentCameraIndex + 1));
-    el("itemBarcode").addEventListener("change", (e) => lookupBarcodeOnline(e.target.value.trim()));
-    el("searchInput").addEventListener("input", handleSearch);
-    el("btnOrganizeProduct").addEventListener("click", async () => {
+    on("btnSearchScan", "click", () => startScanner("search"));
+    on("btnScanBarcodeForAdd", "click", () => startScanner("add"));
+    on("btnCloseScanner", "click", closeScanner);
+    on("btnSwitchCamera", "click", () => startScanner(scannerAction, currentCameraIndex + 1));
+    on("itemBarcode", "change", (e) => lookupBarcodeOnline(e.target.value.trim()));
+    on("searchInput", "input", handleSearch);
+    on("btnOrganizeProduct", "click", async () => {
       const btn = el("btnOrganizeProduct");
       const out = el("productAiResult");
       try {
@@ -665,7 +669,7 @@
       }
     });
 
-    el("btnRunTesseract").addEventListener("click", async () => {
+    on("btnRunTesseract", "click", async () => {
       const btn = el("btnRunTesseract");
       const out = el("tesseractResult");
       const fileInput = el("itemImage");
@@ -699,7 +703,7 @@
       }
     });
 
-    el("btnAskProduct").addEventListener("click", async () => {
+    on("btnAskProduct", "click", async () => {
       const question = el("productQuestion").value.trim();
       const out = el("productQaResult");
       const context = [el("itemDesc").value, dataStore.ocrInfo, dataStore.onlineInfo.join("\n\n")].filter(Boolean).join("\n\n");
@@ -730,7 +734,7 @@
       }
     });
 
-    el("itemImage").addEventListener("change", async (e) => {
+    on("itemImage", "change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const statusContainer = el("ocrStatusContainer");
@@ -803,7 +807,7 @@
       reader.readAsDataURL(file);
     });
 
-    el("locationImage").addEventListener("change", async (e) => {
+    on("locationImage", "change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       const preview = el("locationImagePreview");
@@ -819,7 +823,7 @@
       reader.readAsDataURL(file);
     });
 
-    el("addItemForm").addEventListener("submit", async (e) => {
+    on("addItemForm", "submit", async (e) => {
       e.preventDefault();
       showLoading(true);
       try {
@@ -861,7 +865,7 @@
       showLoading(false);
     });
 
-    el("btnDeleteItem").addEventListener("click", () => {
+    on("btnDeleteItem", "click", () => {
       if (!currentDetailId) return;
       showConfirm("Delete this item permanently?", async () => {
         showLoading(true);
