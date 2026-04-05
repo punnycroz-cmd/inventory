@@ -54,6 +54,13 @@
           </div>
           <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
             <label class="block text-sm font-semibold text-blue-900 mb-2">2. Take Picture for Auto-Description (OCR)</label>
+            <div class="mb-3">
+              <label class="block text-xs text-blue-900 font-semibold mb-1">OCR Mode</label>
+              <select id="ocrMode" class="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="tesseract">Tesseract</option>
+                <option value="trocr">TrOCR (Transformers.js)</option>
+              </select>
+            </div>
             <input type="file" id="itemImage" accept="image/*" capture="environment" class="w-full text-sm text-blue-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition cursor-pointer mb-2" />
             <img id="itemImagePreview" class="hidden w-full h-40 object-cover rounded-lg border border-blue-200 shadow-sm mb-2" src="" alt="Preview" />
             <div id="ocrStatusContainer" class="hidden flex items-center gap-2 text-sm mt-2">
@@ -153,6 +160,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
     let db, auth, currentUser;
     let inventory = [];
@@ -253,6 +261,33 @@
       return normalizeOcrText(ret?.data?.text || "");
     };
 
+    let trocrPipeline = null;
+    const trocrOcr = async (canvas) => {
+      if (!trocrPipeline) {
+        el("ocrStatusText").textContent = "Loading TrOCR model...";
+        trocrPipeline = await pipeline("image-to-text", "Xenova/trocr-small-handwritten");
+      }
+      const result = await trocrPipeline(canvas);
+      if (Array.isArray(result) && result.length > 0) {
+        return normalizeOcrText(result[0]?.generated_text || "");
+      }
+      return normalizeOcrText(result?.generated_text || "");
+    };
+
+    const runSelectedOcr = async (canvas) => {
+      const mode = el("ocrMode")?.value || "tesseract";
+      const primary = mode === "trocr" ? trocrOcr : fallbackTesseractOcr;
+      const secondary = mode === "trocr" ? fallbackTesseractOcr : trocrOcr;
+      const primaryText = await primary(canvas);
+      if (scoreOcrText(primaryText) >= 20) return primaryText;
+      try {
+        const secondaryText = await secondary(canvas);
+        return scoreOcrText(secondaryText) > scoreOcrText(primaryText) ? secondaryText : primaryText;
+      } catch {
+        return primaryText;
+      }
+    };
+
     const loadLocalInventory = () => {
       try {
         localInventory = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
@@ -263,6 +298,11 @@
       inventory = localInventory;
       handleSearch();
     };
+
+    const getOcrMode = () => localStorage.getItem("inventory-ocr-mode") || "tesseract";
+    const setOcrMode = (mode) => localStorage.setItem("inventory-ocr-mode", mode);
+    el("ocrMode").value = getOcrMode();
+    el("ocrMode").addEventListener("change", (e) => setOcrMode(e.target.value));
 
     const saveLocalInventory = (items) => {
       localInventory = items;
@@ -516,7 +556,7 @@
             let best = { text: "", score: -Infinity };
             for (const attempt of attempts) {
               statusText.textContent = attempt.label;
-              const candidate = await fallbackTesseractOcr(attempt.canvas);
+              const candidate = await runSelectedOcr(attempt.canvas);
               const score = scoreOcrText(candidate);
               if (score > best.score) best = { text: candidate, score };
             }
