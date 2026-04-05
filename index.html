@@ -58,7 +58,7 @@
               <label class="block text-xs text-blue-900 font-semibold mb-1">OCR Mode</label>
               <select id="ocrMode" class="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="tesseract">Tesseract</option>
-                <option value="trocr">TrOCR (Transformers.js)</option>
+                <option value="trocr">TrOCR Printed (Transformers.js)</option>
               </select>
             </div>
             <input type="file" id="itemImage" accept="image/*" capture="environment" class="w-full text-sm text-blue-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition cursor-pointer mb-2" />
@@ -101,6 +101,18 @@
               <button type="button" id="btnClearDescription" class="text-[10px] text-indigo-600 hover:underline font-medium">Clear all information</button>
               <span id="lookupCount" class="text-[9px] text-gray-400"></span>
             </div>
+          </div>
+          <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 space-y-3">
+            <label class="block text-sm font-semibold text-emerald-900">5. Product AI</label>
+            <p class="text-[11px] text-emerald-700 leading-relaxed">Use the OCR text to suggest product fields and ask questions about the product.</p>
+            <button type="button" id="btnOrganizeProduct" class="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg hover:bg-emerald-700 transition active:scale-95">Suggest Product Fields</button>
+            <div id="productAiResult" class="hidden bg-white border border-emerald-100 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap"></div>
+            <div class="space-y-2">
+              <label class="block text-xs text-emerald-900 font-semibold">Ask about this product</label>
+              <input type="text" id="productQuestion" placeholder="Example: What is the weight?" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+              <button type="button" id="btnAskProduct" class="w-full bg-white border border-emerald-200 text-emerald-700 font-semibold py-2.5 rounded-lg hover:bg-emerald-100 transition active:scale-95">Ask Question</button>
+            </div>
+            <div id="productQaResult" class="hidden bg-white border border-emerald-100 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap"></div>
           </div>
           <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl mt-4 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition flex items-center justify-center gap-2"><i data-lucide="save"></i> Save Item to Database</button>
         </form>
@@ -178,6 +190,8 @@
     const LS_KEY = "inventory-local-items";
     let useLocalStorage = true;
     let localInventory = [];
+    let embeddingPipeline = null;
+    let qaPipeline = null;
 
     const el = (id) => document.getElementById(id);
     const safe = (v) => String(v ?? "").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -199,6 +213,11 @@
       el("onlineDataResult").innerHTML = "";
       el("onlineDataResult").classList.add("hidden");
       el("lookupCount").textContent = "";
+      el("productAiResult").innerHTML = "";
+      el("productAiResult").classList.add("hidden");
+      el("productQaResult").innerHTML = "";
+      el("productQaResult").classList.add("hidden");
+      el("productQuestion").value = "";
     };
 
     const normalizeOcrText = (text) => {
@@ -265,7 +284,7 @@
     const trocrOcr = async (canvas) => {
       if (!trocrPipeline) {
         el("ocrStatusText").textContent = "Loading TrOCR model...";
-        trocrPipeline = await pipeline("image-to-text", "Xenova/trocr-small-handwritten");
+        trocrPipeline = await pipeline("image-to-text", "Xenova/trocr-small-printed");
       }
       const result = await trocrPipeline(canvas);
       if (Array.isArray(result) && result.length > 0) {
@@ -276,16 +295,92 @@
 
     const runSelectedOcr = async (canvas) => {
       const mode = el("ocrMode")?.value || "tesseract";
-      const primary = mode === "trocr" ? trocrOcr : fallbackTesseractOcr;
-      const secondary = mode === "trocr" ? fallbackTesseractOcr : trocrOcr;
-      const primaryText = await primary(canvas);
-      if (scoreOcrText(primaryText) >= 20) return primaryText;
-      try {
-        const secondaryText = await secondary(canvas);
-        return scoreOcrText(secondaryText) > scoreOcrText(primaryText) ? secondaryText : primaryText;
-      } catch {
-        return primaryText;
+      return mode === "trocr" ? trocrOcr(canvas) : fallbackTesseractOcr(canvas);
+    };
+
+    const normalizeVec = (vec) => {
+      const flat = Array.from(vec || []);
+      const norm = Math.sqrt(flat.reduce((sum, n) => sum + (n * n), 0)) || 1;
+      return flat.map((n) => n / norm);
+    };
+
+    const cosineSimilarity = (a, b) => {
+      const len = Math.min(a.length, b.length);
+      let sum = 0;
+      for (let i = 0; i < len; i++) sum += a[i] * b[i];
+      return sum;
+    };
+
+    const getEmbedding = async (text) => {
+      if (!embeddingPipeline) {
+        embeddingPipeline = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
       }
+      const output = await embeddingPipeline(text, { pooling: "mean", normalize: true });
+      return normalizeVec(output.data || output);
+    };
+
+    const askProductQa = async (question, context) => {
+      if (!qaPipeline) {
+        qaPipeline = await pipeline("question-answering", "Xenova/distilbert-base-cased-distilled-squad");
+      }
+      return qaPipeline(question, context);
+    };
+
+    const organizeProductText = async () => {
+      const sourceText = (el("itemDesc").value || dataStore.ocrInfo || "").trim();
+      const lines = sourceText.split(/\n+/).map(l => l.trim()).filter(Boolean);
+      if (!lines.length) {
+        return "No OCR text available yet. Add a photo first.";
+      }
+
+      const prompts = {
+        brand: "brand name manufacturer company",
+        product: "product name item name",
+        weight: "net weight ounces grams quantity",
+        flavor: "flavor variant type description",
+        details: "product description basic info"
+      };
+
+      const promptEmbeddings = {};
+      for (const [key, prompt] of Object.entries(prompts)) {
+        promptEmbeddings[key] = await getEmbedding(prompt);
+      }
+
+      const lineEmbeddings = [];
+      for (const line of lines) {
+        lineEmbeddings.push({ line, emb: await getEmbedding(line) });
+      }
+
+      const pickBest = (key) => {
+        let best = { line: "", score: -Infinity };
+        for (const item of lineEmbeddings) {
+          const score = cosineSimilarity(item.emb, promptEmbeddings[key]);
+          if (score > best.score) best = { line: item.line, score };
+        }
+        return best.line;
+      };
+
+      const brand = pickBest("brand") || "";
+      const product = pickBest("product") || "";
+      const weight = pickBest("weight") || "";
+      const flavor = pickBest("flavor") || "";
+      const details = pickBest("details") || "";
+
+      const organized = [
+        "[AI ORGANIZED PRODUCT DATA]",
+        `Brand: ${brand || "Unknown"}`,
+        `Product: ${product || "Unknown"}`,
+        `Weight: ${weight || "Unknown"}`,
+        `Flavor/Variant: ${flavor || "Unknown"}`,
+        `Details: ${details || "Unknown"}`
+      ].join("\n");
+
+      el("productAiResult").textContent = organized;
+      el("productAiResult").classList.remove("hidden");
+      if (!el("itemName").value && product) el("itemName").value = product;
+      if (!dataStore.ocrInfo) dataStore.ocrInfo = sourceText;
+      syncFullDescription();
+      return organized;
     };
 
     const loadLocalInventory = () => {
@@ -511,6 +606,7 @@
       el("locationImageStatus").classList.add("hidden");
       currentItemImageBase64 = null;
       currentLocationImageBase64 = null;
+      el("ocrMode").value = getOcrMode();
       switchView("view-add-item");
     });
     el("btnSearchScan").addEventListener("click", () => startScanner("search"));
@@ -519,6 +615,55 @@
     el("btnSwitchCamera").addEventListener("click", () => startScanner(scannerAction, currentCameraIndex + 1));
     el("itemBarcode").addEventListener("change", (e) => lookupBarcodeOnline(e.target.value.trim()));
     el("searchInput").addEventListener("input", handleSearch);
+    el("btnOrganizeProduct").addEventListener("click", async () => {
+      const btn = el("btnOrganizeProduct");
+      const out = el("productAiResult");
+      try {
+        btn.disabled = true;
+        btn.textContent = "Organizing...";
+        const result = await organizeProductText();
+        out.textContent = result;
+        out.classList.remove("hidden");
+      } catch (err) {
+        console.error(err);
+        out.textContent = "Could not organize product data.";
+        out.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Suggest Product Fields";
+      }
+    });
+
+    el("btnAskProduct").addEventListener("click", async () => {
+      const question = el("productQuestion").value.trim();
+      const out = el("productQaResult");
+      const context = [el("itemDesc").value, dataStore.ocrInfo, dataStore.onlineInfo.join("\n\n")].filter(Boolean).join("\n\n");
+      if (!question) {
+        out.textContent = "Ask a question first.";
+        out.classList.remove("hidden");
+        return;
+      }
+      if (!context) {
+        out.textContent = "Add a photo or OCR text first.";
+        out.classList.remove("hidden");
+        return;
+      }
+      try {
+        el("btnAskProduct").disabled = true;
+        el("btnAskProduct").textContent = "Thinking...";
+        const answer = await askProductQa(question, context);
+        out.textContent = answer?.answer ? `Answer: ${answer.answer}` : "No clear answer found.";
+        if (answer?.score !== undefined) out.textContent += `\nConfidence: ${Math.round(answer.score * 100)}%`;
+        out.classList.remove("hidden");
+      } catch (err) {
+        console.error(err);
+        out.textContent = "Could not answer that question.";
+        out.classList.remove("hidden");
+      } finally {
+        el("btnAskProduct").disabled = false;
+        el("btnAskProduct").textContent = "Ask Question";
+      }
+    });
 
     el("itemImage").addEventListener("change", async (e) => {
       const file = e.target.files[0];
@@ -546,6 +691,7 @@
           dataStore.imageStatus = "Local photo captured.";
           syncFullDescription();
           try {
+            const selectedMode = el("ocrMode").value || "tesseract";
             const attempts = [
               { label: "Reading label...", canvas: buildCropCanvas(img, w, h) },
               { label: "Trying contrast boost...", canvas: buildOcrCanvas(img, w, h, "high-contrast") },
@@ -559,6 +705,15 @@
               const candidate = await runSelectedOcr(attempt.canvas);
               const score = scoreOcrText(candidate);
               if (score > best.score) best = { text: candidate, score };
+            }
+
+            if (best.score < 20) {
+              statusText.textContent = "Trying alternate OCR...";
+              const alternate = selectedMode === "trocr" ? fallbackTesseractOcr : trocrOcr;
+              const altCandidate = await alternate(attempts[0].canvas);
+              if (scoreOcrText(altCandidate) > best.score) {
+                best = { text: altCandidate, score: scoreOcrText(altCandidate) };
+              }
             }
 
             if (best.text.length > 3) {
