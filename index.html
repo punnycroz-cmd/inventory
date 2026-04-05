@@ -322,16 +322,7 @@
     };
 
     const runSelectedOcr = async (canvas) => {
-      const mode = el("ocrMode")?.value || "tesseract";
-      const primary = mode === "trocr" ? trocrOcr : fallbackTesseractOcr;
-      const secondary = mode === "trocr" ? fallbackTesseractOcr : trocrOcr;
-      let primaryText = "";
-      let secondaryText = "";
-      try { primaryText = await primary(canvas); } catch (err) { console.error(err); }
-      try { secondaryText = await secondary(canvas); } catch (err) { console.error(err); }
-      const primaryScore = scoreOcrText(primaryText);
-      const secondaryScore = scoreOcrText(secondaryText);
-      return secondaryScore > primaryScore ? secondaryText : primaryText;
+      return fallbackTesseractOcr(canvas);
     };
 
     const normalizeVec = (vec) => {
@@ -429,11 +420,6 @@
       inventory = localInventory;
       handleSearch();
     };
-
-    const getOcrMode = () => localStorage.getItem("inventory-ocr-mode") || "tesseract";
-    const setOcrMode = (mode) => localStorage.setItem("inventory-ocr-mode", mode);
-    el("ocrMode").value = getOcrMode();
-    el("ocrMode").addEventListener("change", (e) => setOcrMode(e.target.value));
 
     const saveLocalInventory = (items) => {
       localInventory = items;
@@ -652,7 +638,6 @@
       el("locationImageStatus").classList.add("hidden");
       currentItemImageBase64 = null;
       currentLocationImageBase64 = null;
-      el("ocrMode").value = getOcrMode();
       switchView("view-add-item");
     });
     el("btnSearchScan").addEventListener("click", () => startScanner("search"));
@@ -792,19 +777,10 @@
               }
             }
 
-            statusText.textContent = "Comparing OCR engines...";
-            const selectedMode = el("ocrMode").value || "tesseract";
-            const alternate = selectedMode === "trocr" ? fallbackTesseractOcr : trocrOcr;
-            let altCandidate = "";
-            try {
-              altCandidate = await alternate(bestCanvas);
-            } catch (err) {
-              console.error(err);
-            }
+            statusText.textContent = "Running Tesseract...";
+            const altCandidate = await fallbackTesseractOcr(bestCanvas);
             const altScore = scoreOcrText(altCandidate);
-            if (altScore > best.score) {
-              best = { text: altCandidate, score: altScore };
-            }
+            if (altScore > best.score) best = { text: altCandidate, score: altScore };
 
             if (best.text.length > 3) {
               dataStore.ocrInfo = best.text;
