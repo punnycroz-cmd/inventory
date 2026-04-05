@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -75,6 +76,12 @@
                 <label class="block text-xs text-gray-500 mb-1">Quantity</label>
                 <input type="number" id="itemQty" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" value="1" min="0" required />
               </div>
+            </div>
+            <div class="pt-2 border-t border-gray-200">
+              <label class="block text-sm font-semibold text-gray-700 mb-2">3b. Take Picture for Location</label>
+              <input type="file" id="locationImage" accept="image/*" capture="environment" class="w-full text-sm text-blue-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition cursor-pointer mb-2" />
+              <img id="locationImagePreview" class="hidden w-full h-32 object-cover rounded-lg border border-gray-200 shadow-sm mb-2" src="" alt="Location preview" />
+              <div id="locationImageStatus" class="hidden text-[10px] mt-2 text-gray-500 font-medium"></div>
             </div>
           </div>
           <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-3">
@@ -158,6 +165,7 @@
     let backCameras = [];
     let currentCameraIndex = 0;
     let currentItemImageBase64 = null;
+    let currentLocationImageBase64 = null;
     let dataStore = { onlineInfo: [], ocrInfo: "", imageStatus: "", onlineImgUrl: "" };
     const appId = typeof __app_id !== "undefined" ? __app_id : "default-app-id";
 
@@ -234,6 +242,14 @@
     };
 
     const canvasToDataUrl = (canvas) => canvas.toDataURL("image/jpeg", 0.92);
+
+    const fallbackTesseractOcr = async (canvas) => {
+      const worker = await Tesseract.createWorker("eng");
+      await worker.setParameters({ tessedit_pageseg_mode: "6" });
+      const ret = await worker.recognize(canvas);
+      await worker.terminate();
+      return normalizeOcrText(ret?.data?.text || "");
+    };
 
     const switchView = (viewId) => {
       ["view-list", "view-add-item", "view-item-detail"].forEach(id => el(id).classList.add("hidden"));
@@ -419,7 +435,16 @@
     el("btnClearDescription").addEventListener("click", clearDescription);
     el("btnBackFromAdd").addEventListener("click", () => switchView("view-list"));
     el("btnBackFromDetail").addEventListener("click", () => switchView("view-list"));
-    el("fabAdd").addEventListener("click", () => { el("addItemForm").reset(); clearDescription(); el("itemImagePreview").classList.add("hidden"); switchView("view-add-item"); });
+    el("fabAdd").addEventListener("click", () => {
+      el("addItemForm").reset();
+      clearDescription();
+      el("itemImagePreview").classList.add("hidden");
+      el("locationImagePreview").classList.add("hidden");
+      el("locationImageStatus").classList.add("hidden");
+      currentItemImageBase64 = null;
+      currentLocationImageBase64 = null;
+      switchView("view-add-item");
+    });
     el("btnSearchScan").addEventListener("click", () => startScanner("search"));
     el("btnScanBarcodeForAdd").addEventListener("click", () => startScanner("add"));
     el("btnCloseScanner").addEventListener("click", closeScanner);
@@ -487,6 +512,22 @@
       reader.readAsDataURL(file);
     });
 
+    el("locationImage").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const preview = el("locationImagePreview");
+      const status = el("locationImageStatus");
+      status.classList.remove("hidden");
+      status.textContent = "Location photo captured.";
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        currentLocationImageBase64 = ev.target.result;
+        preview.src = currentLocationImageBase64;
+        preview.classList.remove("hidden");
+      };
+      reader.readAsDataURL(file);
+    });
+
     el("addItemForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!currentUser || !db) return showMsg("Firebase is not configured yet.");
@@ -499,12 +540,17 @@
           location: el("itemLocation").value,
           quantity: parseInt(el("itemQty").value, 10),
           imageBase64: currentItemImageBase64,
+          locationImageBase64: currentLocationImageBase64,
           onlineImgUrl: dataStore.onlineImgUrl,
           createdAt: new Date().toISOString()
         });
         e.target.reset();
         clearDescription();
         el("itemImagePreview").classList.add("hidden");
+        el("locationImagePreview").classList.add("hidden");
+        el("locationImageStatus").classList.add("hidden");
+        currentItemImageBase64 = null;
+        currentLocationImageBase64 = null;
         switchView("view-list");
         showMsg("Item saved successfully!");
       } catch (err) {
