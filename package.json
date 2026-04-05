@@ -8,8 +8,5 @@
   },
   "devDependencies": {
     "serve": "^14.2.4"
-  },
-  "dependencies": {
-    "scribe.js-ocr": "^0.10.1"
   }
 }

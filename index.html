@@ -153,7 +153,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    import scribe from "./node_modules/scribe.js-ocr/scribe.js";
 
     let db, auth, currentUser;
     let inventory = [];
@@ -168,6 +167,9 @@
     let currentLocationImageBase64 = null;
     let dataStore = { onlineInfo: [], ocrInfo: "", imageStatus: "", onlineImgUrl: "" };
     const appId = typeof __app_id !== "undefined" ? __app_id : "default-app-id";
+    const LS_KEY = "inventory-local-items";
+    let useLocalStorage = true;
+    let localInventory = [];
 
     const el = (id) => document.getElementById(id);
     const safe = (v) => String(v ?? "").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -249,6 +251,24 @@
       const ret = await worker.recognize(canvas);
       await worker.terminate();
       return normalizeOcrText(ret?.data?.text || "");
+    };
+
+    const loadLocalInventory = () => {
+      try {
+        localInventory = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+      } catch {
+        localInventory = [];
+      }
+      localInventory.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      inventory = localInventory;
+      handleSearch();
+    };
+
+    const saveLocalInventory = (items) => {
+      localInventory = items;
+      localStorage.setItem(LS_KEY, JSON.stringify(localInventory));
+      inventory = localInventory;
+      handleSearch();
     };
 
     const switchView = (viewId) => {
@@ -396,6 +416,13 @@
     window.openDetail = openDetail;
 
     async function initFirebase() {
+      if (typeof __firebase_config === "undefined") {
+        useLocalStorage = true;
+        el("authStatus").textContent = "Local demo";
+        el("authStatus").classList.remove("opacity-0");
+        loadLocalInventory();
+        return;
+      }
       try {
         const config = typeof __firebase_config !== "undefined" ? JSON.parse(__firebase_config) : null;
         if (!config) {
@@ -404,6 +431,7 @@
           renderList([]);
           return;
         }
+        useLocalStorage = false;
         const app = initializeApp(config);
         auth = getAuth(app);
         db = getFirestore(app);
@@ -479,17 +507,16 @@
           syncFullDescription();
           try {
             const attempts = [
-              { label: "Focusing crop...", canvas: buildCropCanvas(img, w, h) },
-              { label: "Reading label...", canvas: buildOcrCanvas(img, w, h, "high-contrast") },
+              { label: "Reading label...", canvas: buildCropCanvas(img, w, h) },
+              { label: "Trying contrast boost...", canvas: buildOcrCanvas(img, w, h, "high-contrast") },
               { label: "Trying text blocks...", canvas: buildOcrCanvas(img, w, h, "clean") },
-              { label: "Checking fallback...", canvas: buildOcrCanvas(img, w, h, "soft") }
+              { label: "Trying soft fallback...", canvas: buildOcrCanvas(img, w, h, "soft") }
             ];
 
             let best = { text: "", score: -Infinity };
             for (const attempt of attempts) {
               statusText.textContent = attempt.label;
-              const result = await scribe.extractText([canvasToDataUrl(attempt.canvas)], ["eng"], "text");
-              const candidate = normalizeOcrText(result);
+              const candidate = await fallbackTesseractOcr(attempt.canvas);
               const score = scoreOcrText(candidate);
               if (score > best.score) best = { text: candidate, score };
             }
@@ -530,10 +557,10 @@
 
     el("addItemForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (!currentUser || !db) return showMsg("Firebase is not configured yet.");
       showLoading(true);
       try {
-        await addDoc(collection(db, "artifacts", appId, "users", currentUser.uid, "inventory"), {
+        const newItem = {
+          id: crypto.randomUUID(),
           barcode: el("itemBarcode").value,
           name: el("itemName").value,
           description: el("itemDesc").value,
@@ -543,7 +570,12 @@
           locationImageBase64: currentLocationImageBase64,
           onlineImgUrl: dataStore.onlineImgUrl,
           createdAt: new Date().toISOString()
-        });
+        };
+        if (useLocalStorage || !currentUser || !db) {
+          saveLocalInventory([newItem, ...localInventory]);
+        } else {
+          await addDoc(collection(db, "artifacts", appId, "users", currentUser.uid, "inventory"), newItem);
+        }
         e.target.reset();
         clearDescription();
         el("itemImagePreview").classList.add("hidden");
@@ -565,7 +597,11 @@
       showConfirm("Delete this item permanently?", async () => {
         showLoading(true);
         try {
-          await deleteDoc(doc(db, "artifacts", appId, "users", currentUser.uid, "inventory", currentDetailId));
+          if (useLocalStorage || !currentUser || !db) {
+            saveLocalInventory(localInventory.filter(item => item.id !== currentDetailId));
+          } else {
+            await deleteDoc(doc(db, "artifacts", appId, "users", currentUser.uid, "inventory", currentDetailId));
+          }
           switchView("view-list");
         } catch (err) { showMsg("Delete error."); }
         showLoading(false);
