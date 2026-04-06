@@ -227,20 +227,38 @@
 
     const clearDescription = () => {
       dataStore = { onlineInfo: [], ocrInfo: "", imageStatus: "", onlineImgUrl: "" };
-      el("itemDesc").value = "";
-      el("onlineDataResult").innerHTML = "";
-      el("onlineDataResult").classList.add("hidden");
-      el("lookupCount").textContent = "";
-      el("onlineItemName").value = "";
-      el("onlineItemBrand").value = "";
-      el("onlineItemCategory").value = "";
-      el("productAiResult").innerHTML = "";
-      el("productAiResult").classList.add("hidden");
-      el("productQaResult").innerHTML = "";
-      el("productQaResult").classList.add("hidden");
-      el("productQuestion").value = "";
-      el("tesseractResult").innerHTML = "";
-      el("tesseractResult").classList.add("hidden");
+      const itemDesc = el("itemDesc");
+      const onlineDataResult = el("onlineDataResult");
+      const lookupCount = el("lookupCount");
+      const onlineItemName = el("onlineItemName");
+      const onlineItemBrand = el("onlineItemBrand");
+      const onlineItemCategory = el("onlineItemCategory");
+      const productAiResult = el("productAiResult");
+      const productQaResult = el("productQaResult");
+      const productQuestion = el("productQuestion");
+      const tesseractResult = el("tesseractResult");
+      if (itemDesc) itemDesc.value = "";
+      if (onlineDataResult) {
+        onlineDataResult.innerHTML = "";
+        onlineDataResult.classList.add("hidden");
+      }
+      if (lookupCount) lookupCount.textContent = "";
+      if (onlineItemName) onlineItemName.value = "";
+      if (onlineItemBrand) onlineItemBrand.value = "";
+      if (onlineItemCategory) onlineItemCategory.value = "";
+      if (productAiResult) {
+        productAiResult.innerHTML = "";
+        productAiResult.classList.add("hidden");
+      }
+      if (productQaResult) {
+        productQaResult.innerHTML = "";
+        productQaResult.classList.add("hidden");
+      }
+      if (productQuestion) productQuestion.value = "";
+      if (tesseractResult) {
+        tesseractResult.innerHTML = "";
+        tesseractResult.classList.add("hidden");
+      }
     };
 
     const normalizeOcrText = (text) => {
