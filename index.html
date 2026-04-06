@@ -62,7 +62,7 @@
             </div>
           </div>
           <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
-            <label class="block text-sm font-semibold text-gray-700 mb-2">3. Item Identity & Location</label>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">3. Item Identity</label>
             <div class="grid grid-cols-1 gap-3">
               <div>
                 <label class="block text-xs text-gray-500 mb-1">Item Name</label>
@@ -78,26 +78,33 @@
                   <input type="text" id="itemCategory" placeholder="E.g., Candy" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
               </div>
-              <div class="flex gap-4">
-                <div class="flex-1">
-                  <label class="block text-xs text-gray-500 mb-1">Location</label>
-                  <input type="text" id="itemLocation" placeholder="E.g., Shelf A1" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" required />
-                </div>
-                <div class="w-24">
-                  <label class="block text-xs text-gray-500 mb-1">Quantity</label>
-                  <input type="number" id="itemQty" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" value="1" min="0" required />
-                </div>
-              </div>
             </div>
-            <div class="pt-2 border-t border-gray-200">
-              <label class="block text-sm font-semibold text-gray-700 mb-2">3b. Take Picture for Location</label>
+            <div id="barcodeLookupStatus" class="hidden text-[10px] mt-2 flex items-center gap-1 font-medium italic"></div>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">4. Location & Storage</label>
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Location</label>
+                <input type="text" id="itemLocation" placeholder="E.g., Shelf A1" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" required />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Location Photo</label>
               <input type="file" id="locationImage" accept="image/*" capture="environment" class="w-full text-sm text-blue-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition cursor-pointer mb-2" />
               <img id="locationImagePreview" class="hidden w-full h-32 object-cover rounded-lg border border-gray-200 shadow-sm mb-2" src="" alt="Location preview" />
               <div id="locationImageStatus" class="hidden text-[10px] mt-2 text-gray-500 font-medium"></div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">5. Quantity</label>
+            <div class="w-24">
+              <label class="block text-xs text-gray-500 mb-1">Quantity</label>
+              <input type="number" id="itemQty" class="border border-gray-300 p-2.5 rounded-lg w-full focus:ring-2 focus:ring-blue-500 outline-none" value="1" min="0" required />
             </div>
           </div>
           <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 space-y-3">
-            <label class="block text-sm font-semibold text-indigo-900">4. Online database product fields</label>
+            <label class="block text-sm font-semibold text-indigo-900">6. Full Online Database Details</label>
             <div id="onlineDataResult" class="hidden space-y-3 animate-fade-in max-h-64 overflow-y-auto pr-1"></div>
             <div class="grid grid-cols-1 gap-3">
               <div>
@@ -123,10 +130,18 @@
             </div>
           </div>
           <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 space-y-3">
-            <label class="block text-sm font-semibold text-emerald-900">5. Additional OCR with Tesseract</label>
-            <p class="text-[11px] text-emerald-700 leading-relaxed">Use Tesseract as an extra read on the product photo for extra text, labels, or weight info.</p>
-            <button type="button" id="btnRunTesseract" class="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg hover:bg-emerald-700 transition active:scale-95">Run Additional OCR</button>
+            <label class="block text-sm font-semibold text-emerald-900">7. Additional OCR with Tesseract</label>
+            <p class="text-[11px] text-emerald-700 leading-relaxed">Leave this image blank to reuse the product photo from section 2, or upload a new image for OCR.</p>
+            <input type="file" id="ocrImage" accept="image/*" capture="environment" class="w-full text-sm text-emerald-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 transition cursor-pointer" />
+            <button type="button" id="btnRunTesseract" class="w-full bg-emerald-600 text-white font-semibold py-2.5 rounded-lg hover:bg-emerald-700 transition active:scale-95">Run OCR Now</button>
             <div id="tesseractResult" class="hidden bg-white border border-emerald-100 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap"></div>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+            <label class="block text-sm font-semibold text-slate-900">8. Ask Inventory AI</label>
+            <p class="text-[11px] text-slate-600 leading-relaxed">Ask about items already stored in your inventory database.</p>
+            <textarea id="inventoryQuestion" placeholder="Example: Which items are stored in Shelf A1 and what is the quantity?" class="border border-gray-300 p-2.5 rounded-lg w-full h-24 focus:ring-2 focus:ring-blue-500 outline-none text-sm leading-relaxed"></textarea>
+            <button type="button" id="btnAskInventory" class="w-full bg-slate-800 text-white font-semibold py-2.5 rounded-lg hover:bg-slate-700 transition active:scale-95">Ask Inventory AI</button>
+            <div id="inventoryAiResult" class="hidden bg-white border border-slate-200 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap"></div>
           </div>
           <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl mt-4 shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition flex items-center justify-center gap-2"><i data-lucide="save"></i> Save Item to Database</button>
         </form>
@@ -218,6 +233,7 @@
 
     const syncFullDescription = () => {
       const descInput = el("itemDesc");
+      if (!descInput) return;
       const parts = [];
       if (dataStore.onlineInfo.length) parts.push(`[ONLINE DATABASE RESULTS]\n${dataStore.onlineInfo.join("\n\n")}`);
       if (dataStore.imageStatus) parts.push(`[MEDIA]\n${dataStore.imageStatus}`);
@@ -233,9 +249,9 @@
       const onlineItemName = el("onlineItemName");
       const onlineItemBrand = el("onlineItemBrand");
       const onlineItemCategory = el("onlineItemCategory");
-      const productAiResult = el("productAiResult");
-      const productQaResult = el("productQaResult");
-      const productQuestion = el("productQuestion");
+      const inventoryAiResult = el("inventoryAiResult");
+      const inventoryQuestion = el("inventoryQuestion");
+      const ocrImage = el("ocrImage");
       const tesseractResult = el("tesseractResult");
       if (itemDesc) itemDesc.value = "";
       if (onlineDataResult) {
@@ -246,15 +262,12 @@
       if (onlineItemName) onlineItemName.value = "";
       if (onlineItemBrand) onlineItemBrand.value = "";
       if (onlineItemCategory) onlineItemCategory.value = "";
-      if (productAiResult) {
-        productAiResult.innerHTML = "";
-        productAiResult.classList.add("hidden");
+      if (inventoryAiResult) {
+        inventoryAiResult.innerHTML = "";
+        inventoryAiResult.classList.add("hidden");
       }
-      if (productQaResult) {
-        productQaResult.innerHTML = "";
-        productQaResult.classList.add("hidden");
-      }
-      if (productQuestion) productQuestion.value = "";
+      if (inventoryQuestion) inventoryQuestion.value = "";
+      if (ocrImage) ocrImage.value = "";
       if (tesseractResult) {
         tesseractResult.innerHTML = "";
         tesseractResult.classList.add("hidden");
@@ -375,61 +388,50 @@
       return qaPipeline(question, context);
     };
 
-    const organizeProductText = async () => {
-      const sourceText = (el("itemDesc").value || dataStore.ocrInfo || "").trim();
-      const lines = sourceText.split(/\n+/).map(l => l.trim()).filter(Boolean);
-      if (!lines.length) {
-        return "No OCR text available yet. Add a photo first.";
+    const buildInventoryContext = (items) => {
+      return items.map((item) => [
+        `Name: ${item.name || "Unknown"}`,
+        `Brand: ${item.brand || "Unknown"}`,
+        `Category: ${item.category || "Unknown"}`,
+        `Barcode: ${item.barcode || "Unknown"}`,
+        `Location: ${item.location || "Unknown"}`,
+        `Quantity: ${item.quantity ?? "Unknown"}`,
+        `Description: ${item.description || "None"}`
+      ].join("\n")).join("\n\n");
+    };
+
+    const askInventoryAi = async (question) => {
+      const query = String(question || "").trim();
+      if (!query) return "Ask a question first.";
+      if (!inventory.length) return "No inventory items saved yet.";
+
+      const queryEmb = await getEmbedding(query);
+      const scored = [];
+      for (const item of inventory) {
+        const itemText = [
+          item.name,
+          item.brand,
+          item.category,
+          item.barcode,
+          item.location,
+          item.description
+        ].filter(Boolean).join(" ");
+        const emb = await getEmbedding(itemText || query);
+        scored.push({ item, score: cosineSimilarity(queryEmb, emb) });
       }
+      scored.sort((a, b) => b.score - a.score);
+      const topItems = scored.slice(0, 3).map(entry => entry.item);
+      const context = buildInventoryContext(topItems);
+      const answer = await askProductQa(query, context);
 
-      const prompts = {
-        brand: "brand name manufacturer company",
-        product: "product name item name",
-        weight: "net weight ounces grams quantity",
-        flavor: "flavor variant type description",
-        details: "product description basic info"
-      };
-
-      const promptEmbeddings = {};
-      for (const [key, prompt] of Object.entries(prompts)) {
-        promptEmbeddings[key] = await getEmbedding(prompt);
-      }
-
-      const lineEmbeddings = [];
-      for (const line of lines) {
-        lineEmbeddings.push({ line, emb: await getEmbedding(line) });
-      }
-
-      const pickBest = (key) => {
-        let best = { line: "", score: -Infinity };
-        for (const item of lineEmbeddings) {
-          const score = cosineSimilarity(item.emb, promptEmbeddings[key]);
-          if (score > best.score) best = { line: item.line, score };
-        }
-        return best.line;
-      };
-
-      const brand = pickBest("brand") || "";
-      const product = pickBest("product") || "";
-      const weight = pickBest("weight") || "";
-      const flavor = pickBest("flavor") || "";
-      const details = pickBest("details") || "";
-
-      const organized = [
-        "[AI ORGANIZED PRODUCT DATA]",
-        `Brand: ${brand || "Unknown"}`,
-        `Product: ${product || "Unknown"}`,
-        `Weight: ${weight || "Unknown"}`,
-        `Flavor/Variant: ${flavor || "Unknown"}`,
-        `Details: ${details || "Unknown"}`
+      return [
+        "[INVENTORY AI RESULT]",
+        `Question: ${query}`,
+        `Answer: ${answer?.answer || "No clear answer found."}`,
+        "",
+        "[TOP MATCHES]",
+        ...topItems.map((item, idx) => `${idx + 1}. ${item.name || "Unknown"} | ${item.brand || "Unknown"} | ${item.location || "Unknown"} | Qty ${item.quantity ?? "?"}`)
       ].join("\n");
-
-      el("productAiResult").textContent = organized;
-      el("productAiResult").classList.remove("hidden");
-      if (!el("itemName").value && product) el("itemName").value = product;
-      if (!dataStore.ocrInfo) dataStore.ocrInfo = sourceText;
-      syncFullDescription();
-      return organized;
     };
 
     const loadLocalInventory = () => {
@@ -503,13 +505,19 @@
       statusEl.classList.remove("hidden");
       resultPanel.innerHTML = "";
       dataStore.onlineInfo = [];
+      const itemName = el("itemName");
+      const itemBrand = el("itemBrand");
+      const itemCategory = el("itemCategory");
       onlineName.value = "";
       onlineBrand.value = "";
       onlineCategory.value = "";
       let foundCount = 0;
       const updateUI = (source, name, brand, category, img) => {
         foundCount++;
-        if (!nameInput.value) nameInput.value = name;
+        if (!nameInput.value) nameInput.value = name || "";
+        if (!itemName.value) itemName.value = name || "";
+        if (!itemBrand.value) itemBrand.value = brand || "";
+        if (!itemCategory.value) itemCategory.value = category || "";
         if (!onlineName.value) onlineName.value = name || "";
         if (!onlineBrand.value) onlineBrand.value = brand || "";
         if (!onlineCategory.value) onlineCategory.value = category || "";
@@ -658,6 +666,8 @@
       el("itemImagePreview").classList.add("hidden");
       el("locationImagePreview").classList.add("hidden");
       el("locationImageStatus").classList.add("hidden");
+      const ocrImage = el("ocrImage");
+      if (ocrImage) ocrImage.value = "";
       currentItemImageBase64 = null;
       currentLocationImageBase64 = null;
       switchView("view-add-item");
@@ -668,32 +678,13 @@
     on("btnSwitchCamera", "click", () => startScanner(scannerAction, currentCameraIndex + 1));
     on("itemBarcode", "change", (e) => lookupBarcodeOnline(e.target.value.trim()));
     on("searchInput", "input", handleSearch);
-    on("btnOrganizeProduct", "click", async () => {
-      const btn = el("btnOrganizeProduct");
-      const out = el("productAiResult");
-      try {
-        btn.disabled = true;
-        btn.textContent = "Organizing...";
-        const result = await organizeProductText();
-        out.textContent = result;
-        out.classList.remove("hidden");
-      } catch (err) {
-        console.error(err);
-        out.textContent = "Could not organize product data.";
-        out.classList.remove("hidden");
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Suggest Product Fields";
-      }
-    });
 
     on("btnRunTesseract", "click", async () => {
       const btn = el("btnRunTesseract");
       const out = el("tesseractResult");
-      const fileInput = el("itemImage");
-      const file = fileInput.files[0];
+      const file = el("ocrImage")?.files?.[0] || el("itemImage")?.files?.[0];
       if (!file) {
-        out.textContent = "Take a product photo first.";
+        out.textContent = "Take a product photo first, or upload a new OCR image.";
         out.classList.remove("hidden");
         return;
       }
@@ -721,34 +712,28 @@
       }
     });
 
-    on("btnAskProduct", "click", async () => {
-      const question = el("productQuestion").value.trim();
-      const out = el("productQaResult");
-      const context = [el("itemDesc").value, dataStore.ocrInfo, dataStore.onlineInfo.join("\n\n")].filter(Boolean).join("\n\n");
+    on("btnAskInventory", "click", async () => {
+      const btn = el("btnAskInventory");
+      const out = el("inventoryAiResult");
+      const question = el("inventoryQuestion").value.trim();
       if (!question) {
         out.textContent = "Ask a question first.";
         out.classList.remove("hidden");
         return;
       }
-      if (!context) {
-        out.textContent = "Add a photo or OCR text first.";
-        out.classList.remove("hidden");
-        return;
-      }
       try {
-        el("btnAskProduct").disabled = true;
-        el("btnAskProduct").textContent = "Thinking...";
-        const answer = await askProductQa(question, context);
-        out.textContent = answer?.answer ? `Answer: ${answer.answer}` : "No clear answer found.";
-        if (answer?.score !== undefined) out.textContent += `\nConfidence: ${Math.round(answer.score * 100)}%`;
+        btn.disabled = true;
+        btn.textContent = "Searching...";
+        const result = await askInventoryAi(question);
+        out.textContent = result;
         out.classList.remove("hidden");
       } catch (err) {
         console.error(err);
         out.textContent = "Could not answer that question.";
         out.classList.remove("hidden");
       } finally {
-        el("btnAskProduct").disabled = false;
-        el("btnAskProduct").textContent = "Ask Question";
+        btn.disabled = false;
+        btn.textContent = "Ask Inventory AI";
       }
     });
 
